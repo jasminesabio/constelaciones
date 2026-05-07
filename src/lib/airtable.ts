@@ -100,18 +100,27 @@ async function fetchAirtable<T>(
 
   const url = `${BASE_URL}/${tableName}?${params}`;
 
+  console.log(`[Airtable] Fetching ${tableName}...`, {
+    baseUrl: BASE_URL?.substring(0, 30),
+    hasApiKey: !!API_KEY
+  });
+
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${API_KEY}`,
     },
   });
 
+  console.log(`[Airtable] Response for ${tableName}:`, response.status);
+
   if (!response.ok) {
-    console.error(`Airtable error: ${response.status}`, await response.text());
+    const errorText = await response.text();
+    console.error(`Airtable error: ${response.status}`, errorText);
     return [];
   }
 
   const data = await response.json();
+  console.log(`[Airtable] Got ${data.records?.length || 0} records from ${tableName}`);
   return data.records || [];
 }
 
