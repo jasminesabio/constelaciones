@@ -1,0 +1,52 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  showNav?: boolean;
+}
+
+const { title = 'Constelaciones', showNav = true } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{title}</title>
+  </head>
+  <body>
+    {showNav && (
+      <nav>
+        <div class="wrap nav-row">
+          <a class="nav-wordmark" href="/">Constelaciones</a>
+          <ul class="nav-links">
+            <li><a href="/trips">Trips</a></li>
+            <li><a href="/overlaps">Overlaps</a></li>
+            <li><a href="/friends">Friends</a></li>
+            <li><a href="/tickets">Tickets</a></li>
+          </ul>
+        </div>
+      </nav>
+    )}
+
+    <main>
+      <slot />
+    </main>
+
+    <footer>
+      <div class="wrap footer-row">
+        <a class="footer-wordmark" href="/">Constelaciones</a>
+        <ul class="footer-links">
+          <li><a href="/trips">Trips</a></li>
+          <li><a href="/overlaps">Overlaps</a></li>
+          <li><a href="/friends">Friends</a></li>
+          <li><a href="/tickets">Tickets</a></li>
+        </ul>
+        <p class="footer-tagline">Where everyone's wandering this summer · © 2026</p>
+      </div>
+    </footer>
+  </body>
+</html>

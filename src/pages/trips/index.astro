@@ -1,0 +1,552 @@
+---
+export const prerender = false;
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getTrips, getPeople, type Flight, type Accommodation, type Event } from '../../lib/airtable';
+
+const trips = await getTrips('approved');
+const people = await getPeople();
+
+const destinations = [...new Set(trips.map((t) => t.destination))];
+const sortedTrips = trips.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+
+// Get unique people, countries, and months for filters
+const uniquePeople = [...new Set(trips.map(t => t.person_name).filter(Boolean))].sort();
+const uniqueCountries = [...new Set(trips.map(t => {
+  const parts = t.destination.split(',');
+  return parts[parts.length - 1].trim();
+}))].sort();
+const uniqueMonths = [...new Set(trips.map(t => {
+  const date = new Date(t.start_date);
+  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}))].sort((a, b) => {
+  return new Date(a).getTime() - new Date(b).getTime();
+});
+
+function parseJSON(jsonString?: string) {
+  if (!jsonString) return null;
+  try {
+    return JSON.parse(jsonString);
+  } catch {
+    return null;
+  }
+}
+
+function formatDate(dateStr: string, options: any) {
+  return new Date(dateStr).toLocaleDateString('en-US', options);
+}
+
+function formatDateTime(dateStr: string, options: any) {
+  return new Date(dateStr).toLocaleString('en-US', options);
+}
+---
+
+<BaseLayout title="Constelaciones — Trips">
+  <style>
+    .page-header {
+      padding-block: 1.5rem;
+      background: linear-gradient(175deg, var(--sand) 0%, var(--cream) 75%);
+    }
+    .page-header h1 {
+      margin-bottom: 0.25rem;
+      font-size: 1.75rem;
+    }
+    .page-header p {
+      color: var(--fog);
+      font-size: 0.9rem;
+    }
+    .trip-card {
+      background: white;
+      border: 1px solid var(--clay-lt);
+      border-radius: 6px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+    .trip-card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+    .trip-header {
+      padding: 1rem;
+      background: linear-gradient(135deg, var(--sand) 0%, var(--cream) 100%);
+      border-bottom: 2px solid var(--clay-lt);
+    }
+    .trip-destination {
+      font-family: var(--serif);
+      font-size: 1.25rem;
+      color: var(--bark);
+      margin: 0 0 0.35rem 0;
+    }
+    .trip-meta {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .trip-tag {
+      display: inline-block;
+      background: var(--clay);
+      color: white;
+      padding: 0.35rem 0.75rem;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .trip-dates {
+      font-size: 0.95rem;
+      color: var(--bark);
+      font-weight: 500;
+    }
+    .trip-person {
+      font-size: 0.9rem;
+      color: var(--fog);
+    }
+    .trip-body {
+      padding: 1rem;
+    }
+    .trip-section {
+      margin-bottom: 1rem;
+    }
+    .trip-section:last-child {
+      margin-bottom: 0;
+    }
+    .section-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--fog);
+      margin-bottom: 0.75rem;
+    }
+    .flight-info {
+      background: #f8f9fa;
+      padding: 0.75rem;
+      border-radius: 4px;
+      border-left: 3px solid var(--clay);
+    }
+    .flight-route {
+      font-family: var(--serif);
+      font-size: 1.1rem;
+      color: var(--bark);
+      margin-bottom: 0.5rem;
+    }
+    .flight-details {
+      font-size: 0.85rem;
+      color: var(--fog);
+      line-height: 1.6;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-left: 0.5rem;
+    }
+    .status-booked {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .status-tbd, .status-options {
+      background: #fff3e0;
+      color: #e65100;
+    }
+    .accommodation-info {
+      background: #f8f9fa;
+      padding: 0.75rem;
+      border-radius: 4px;
+      border-left: 3px solid var(--moss);
+    }
+    .accommodation-name {
+      font-weight: 600;
+      color: var(--bark);
+      margin-bottom: 0.25rem;
+    }
+    .accommodation-type {
+      font-size: 0.8rem;
+      color: var(--fog);
+      text-transform: capitalize;
+    }
+    .accommodation-notes {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--fog);
+    }
+    .events-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .event-item {
+      background: #f8f9fa;
+      padding: 0.75rem;
+      border-radius: 4px;
+      border-left: 3px solid var(--clay);
+    }
+    .event-name {
+      font-weight: 600;
+      color: var(--bark);
+      margin-bottom: 0.25rem;
+    }
+    .event-details {
+      font-size: 0.85rem;
+      color: var(--fog);
+    }
+    .event-note {
+      margin-top: 0.25rem;
+    }
+    .trip-notes {
+      padding: 0.75rem;
+      background: #fffbf5;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      color: var(--bark);
+      line-height: 1.5;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--fog);
+    }
+    .filters-section {
+      background: white;
+      border: 1px solid var(--clay-lt);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .filters-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--fog);
+      margin-bottom: 0.75rem;
+    }
+    .filters-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .filter-label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--bark);
+    }
+    .filter-select {
+      padding: 0.75rem;
+      font-family: var(--sans);
+      font-size: 0.95rem;
+      border: 1px solid var(--clay-lt);
+      border-radius: 3px;
+      background: white;
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .filter-select:focus {
+      outline: none;
+      border-color: var(--clay);
+      box-shadow: 0 0 0 2px rgba(200, 134, 106, 0.1);
+    }
+    .active-filters {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .filter-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--sand);
+      color: var(--bark);
+      padding: 0.35rem 0.75rem;
+      border-radius: 3px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .filter-tag button {
+      background: none;
+      border: none;
+      color: var(--clay);
+      cursor: pointer;
+      padding: 0;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .filter-tag button:hover {
+      color: var(--bark);
+    }
+    .trip-count {
+      font-size: 0.85rem;
+      color: var(--fog);
+      margin-bottom: 0.75rem;
+    }
+    @media (max-width: 700px) {
+      .trip-meta {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .trip-header {
+        padding: 0.85rem;
+      }
+      .trip-body {
+        padding: 0.85rem;
+      }
+      .filters-grid {
+        grid-template-columns: 1fr;
+      }
+      .filters-section {
+        padding: 0.85rem;
+      }
+      .page-header {
+        padding-block: 1rem;
+      }
+      .page-header h1 {
+        font-size: 1.5rem;
+      }
+    }
+  </style>
+
+  <section class="section page-header">
+    <div class="wrap">
+      <h1>All trips</h1>
+      <p>Summer adventures across {destinations.length}+ destinations</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="filters-section">
+        <div class="filters-title">Filter Trips</div>
+        <div class="filters-grid">
+          <div class="filter-group">
+            <label class="filter-label" for="filter-person">Person</label>
+            <select id="filter-person" class="filter-select">
+              <option value="">All people</option>
+              {uniquePeople.map(person => (
+                <option value={person}>{person}</option>
+              ))}
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="filter-country">Country</label>
+            <select id="filter-country" class="filter-select">
+              <option value="">All countries</option>
+              {uniqueCountries.map(country => (
+                <option value={country}>{country}</option>
+              ))}
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="filter-month">Month</label>
+            <select id="filter-month" class="filter-select">
+              <option value="">All months</option>
+              {uniqueMonths.map(month => (
+                <option value={month}>{month}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div id="active-filters" class="active-filters"></div>
+      </div>
+
+      <div id="trip-count" class="trip-count"></div>
+
+      {sortedTrips.length > 0 ? (
+        <>
+          {sortedTrips.map((trip) => {
+            const person = people.find((p) => p.id === trip.person_id);
+            const personName = trip.person_name || person?.name || 'Unknown';
+            const startDateOpts = { month: 'short', day: 'numeric' };
+            const endDateOpts = { month: 'short', day: 'numeric', year: 'numeric' };
+            const startDate = formatDate(trip.start_date, startDateOpts);
+            const endDate = formatDate(trip.end_date, endDateOpts);
+            const flightTo = parseJSON(trip.flight_to) as Flight | null;
+            const flightFrom = parseJSON(trip.flight_from) as Flight | null;
+            const accommodation = parseJSON(trip.accommodation) as Accommodation | null;
+            const events = parseJSON(trip.events) as Event[] | null;
+
+            const country = trip.destination.split(',').pop()?.trim() || '';
+            const tripMonth = new Date(trip.start_date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+            return (
+              <div class="trip-card" data-person={personName} data-country={country} data-month={tripMonth}>
+                <div class="trip-header">
+                  <h3 class="trip-destination">{trip.destination}</h3>
+                  <div class="trip-meta">
+                    {trip.event_tag && <span class="trip-tag">{trip.event_tag}</span>}
+                    <span class="trip-dates">📅 {startDate} — {endDate}</span>
+                    <span class="trip-person">👤 {personName}</span>
+                  </div>
+                </div>
+
+                <div class="trip-body">
+                  {flightTo && (
+                    <div class="trip-section">
+                      <div class="section-title">✈️ Flight There</div>
+                      <div class="flight-info">
+                        <div class="flight-route">
+                          {flightTo.departure_airport} → {flightTo.arrival_airport}
+                          {flightTo.status && (
+                            <span class={`status-badge status-${flightTo.status.toLowerCase()}`}>
+                              {flightTo.status === 'booked' ? '✅ Booked' : '🔲 TBD'}
+                            </span>
+                          )}
+                        </div>
+                        <div class="flight-details">
+                          {flightTo.airline && <div>{flightTo.airline} {flightTo.flight_number}</div>}
+                          {flightTo.departure_time && (
+                            <div>Departs: {formatDateTime(flightTo.departure_time, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+                          )}
+                          {flightTo.arrival_time && (
+                            <div>Arrives: {formatDateTime(flightTo.arrival_time, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+                          )}
+                          {flightTo.booking_ref && <div>Booking ref: {flightTo.booking_ref}</div>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {accommodation && (
+                    <div class="trip-section">
+                      <div class="section-title">🏠 Accommodation</div>
+                      <div class="accommodation-info">
+                        <div class="accommodation-name">
+                          {accommodation.name || 'TBD'}
+                          {accommodation.status && (
+                            <span class={`status-badge status-${accommodation.status.toLowerCase()}`}>
+                              {accommodation.status === 'booked' && '✅ Booked'}
+                              {accommodation.status === 'options' && '🔲 Reviewing options'}
+                              {accommodation.status === 'TBD' && '🔲 TBD'}
+                            </span>
+                          )}
+                        </div>
+                        {accommodation.type && <div class="accommodation-type">{accommodation.type}</div>}
+                        {accommodation.notes && <div class="accommodation-notes">{accommodation.notes}</div>}
+                      </div>
+                    </div>
+                  )}
+
+                  {events && events.length > 0 && (
+                    <div class="trip-section">
+                      <div class="section-title">🎉 Events & Highlights</div>
+                      <ul class="events-list">
+                        {events.map((event) => (
+                          <li class="event-item">
+                            <div class="event-name">{event.name}</div>
+                            <div class="event-details">
+                              {event.date && event.time && (
+                                <div>{formatDate(event.date, { month: 'short', day: 'numeric' })} at {event.time}</div>
+                              )}
+                              {event.location && <div>📍 {event.location}</div>}
+                              {event.notes && <div class="event-note">{event.notes}</div>}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {trip.notes && (
+                    <div class="trip-section">
+                      <div class="section-title">📝 Notes</div>
+                      <div class="trip-notes">{trip.notes}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </>
+      ) : (
+        <div class="empty-state">
+          <p>No trips scheduled yet. Check back soon!</p>
+        </div>
+      )}
+    </div>
+  </section>
+
+  <script>
+    const personFilter = document.getElementById('filter-person') as HTMLSelectElement;
+    const countryFilter = document.getElementById('filter-country') as HTMLSelectElement;
+    const monthFilter = document.getElementById('filter-month') as HTMLSelectElement;
+    const activeFiltersDiv = document.getElementById('active-filters') as HTMLElement;
+    const tripCountDiv = document.getElementById('trip-count') as HTMLElement;
+    const tripCards = document.querySelectorAll('.trip-card');
+
+    function updateFilters() {
+      const selectedPerson = personFilter.value;
+      const selectedCountry = countryFilter.value;
+      const selectedMonth = monthFilter.value;
+
+      let visibleCount = 0;
+
+      // Filter trip cards
+      tripCards.forEach(card => {
+        const cardPerson = card.getAttribute('data-person');
+        const cardCountry = card.getAttribute('data-country');
+        const cardMonth = card.getAttribute('data-month');
+
+        const personMatch = !selectedPerson || cardPerson === selectedPerson;
+        const countryMatch = !selectedCountry || cardCountry === selectedCountry;
+        const monthMatch = !selectedMonth || cardMonth === selectedMonth;
+
+        if (personMatch && countryMatch && monthMatch) {
+          (card as HTMLElement).style.display = 'block';
+          visibleCount++;
+        } else {
+          (card as HTMLElement).style.display = 'none';
+        }
+      });
+
+      // Update active filters display
+      const activeTags: string[] = [];
+      if (selectedPerson) {
+        activeTags.push(`<div class="filter-tag">
+          <span>Person: ${selectedPerson}</span>
+          <button onclick="document.getElementById('filter-person').value=''; updateFilters();">×</button>
+        </div>`);
+      }
+      if (selectedCountry) {
+        activeTags.push(`<div class="filter-tag">
+          <span>Country: ${selectedCountry}</span>
+          <button onclick="document.getElementById('filter-country').value=''; updateFilters();">×</button>
+        </div>`);
+      }
+      if (selectedMonth) {
+        activeTags.push(`<div class="filter-tag">
+          <span>Month: ${selectedMonth}</span>
+          <button onclick="document.getElementById('filter-month').value=''; updateFilters();">×</button>
+        </div>`);
+      }
+      activeFiltersDiv.innerHTML = activeTags.join('');
+
+      // Update count
+      const totalCount = tripCards.length;
+      if (selectedPerson || selectedCountry || selectedMonth) {
+        tripCountDiv.textContent = `Showing ${visibleCount} of ${totalCount} trips`;
+      } else {
+        tripCountDiv.textContent = `Showing all ${totalCount} trips`;
+      }
+    }
+
+    // Make updateFilters available globally for the clear buttons
+    (window as any).updateFilters = updateFilters;
+
+    personFilter.addEventListener('change', updateFilters);
+    countryFilter.addEventListener('change', updateFilters);
+    monthFilter.addEventListener('change', updateFilters);
+
+    // Initial update
+    updateFilters();
+  </script>
+</BaseLayout>

@@ -1,43 +1,99 @@
-# Astro Starter Kit: Minimal
+# Constelaciones
 
-```sh
-npm create astro@latest -- --template minimal
+A friends-only summer travel hub for coordinating trips, spotting overlaps, and sharing festival tickets.
+
+## Setup
+
+### 1. Install dependencies
+
+```bash
+npm install
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+### 2. Create `.env` file
 
-## 🚀 Project Structure
+Copy `.env.example` to `.env` and fill in your Airtable credentials:
 
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+```
+AIRTABLE_BASE_ID=appXXXXXXXXXXXXXX
+AIRTABLE_API_KEY=patXXXXXXXXXXXXXXXXXX...
+CONSTELACIONES_PASSWORD=mexicocity
+NOTIFICATION_EMAIL=jasmine.operations@gmail.com
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+### 3. Run locally
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+```bash
+npm run dev
+```
 
-Any static assets, like images, can be placed in the `public/` directory.
+The site will be at `http://localhost:3000`. Log in with password: `mexicocity`
 
-## 🧞 Commands
+### 4. Deploy to Netlify
 
-All commands are run from the root of the project, from a terminal:
+1. Push your code to GitHub
+2. Connect to Netlify and select the repository
+3. Build command: `npm run build`
+4. Publish directory: `dist/`
+5. Add environment variables in Netlify settings
+6. Deploy!
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+## Features
 
-## 👀 Want to learn more?
+- **Password gate**: Single shared password for all visitors
+- **Trip tracking**: Log your summer destinations and dates
+- **Overlaps view**: See when friends will be in the same place at the same time
+- **Ticket marketplace**: List and discover festival/event tickets
+- **Submission queue**: All adds/edits go through Jasmine's approval queue before publishing
+- **Mobile-first**: Optimized for checking on the go
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+## File structure
+
+```
+src/
+├── pages/
+│   ├── login.astro          (password gate)
+│   ├── index.astro          (dashboard)
+│   ├── trips/
+│   │   ├── index.astro      (all trips)
+│   │   └── [id].astro       (trip detail)
+│   ├── overlaps.astro       (timeline + map)
+│   ├── tickets/
+│   │   ├── index.astro      (all tickets)
+│   │   └── [id].astro       (ticket detail)
+│   ├── friends/
+│   │   ├── index.astro      (roster)
+│   │   └── [id].astro       (friend profile)
+│   └── submit.astro         (submission form)
+├── layouts/
+│   └── BaseLayout.astro     (shared nav + footer)
+├── lib/
+│   └── airtable.ts          (API client)
+├── middleware.ts            (auth middleware)
+└── styles/
+    └── global.css           (design tokens)
+```
+
+## Airtable Tables
+
+The base needs 4 tables:
+
+- **People**: id, name, home_city, avatar_url, contact_handles, last_updated
+- **Trips**: id, person_id, destination, start_date, end_date, event_tag, notes, status, last_updated
+- **Tickets**: id, event_name, event_date, event_location, seller_id, asking_price, status, notes, last_updated
+- **Submissions**: id, type, submitter_name, submitter_contact, payload, status, admin_notes, created_at, updated_at
+
+## Admin workflow
+
+1. Check **Submissions** table in Airtable (filter: status = "pending")
+2. Review each submission and either approve or reject
+3. If approved, create a row in **Trips** or **Tickets** with the data from the submission's `payload` field
+4. Update submission status to "approved"
+5. Approved entries appear on the public site
+
+## Notes
+
+- The password gate uses a single shared password (distributed by Jasmine)
+- No user accounts or per-friend authentication yet
+- Contact between friends happens out-of-band (IG/WhatsApp/etc.)
+- Future enhancement: Add real-time updates with Supabase for live trip notifications
