@@ -1,10 +1,12 @@
-const BASE_ID = import.meta.env.AIRTABLE_BASE_ID;
-const API_KEY = import.meta.env.AIRTABLE_API_KEY;
+// In Netlify Functions (production), use process.env
+// In local dev, use import.meta.env
+const BASE_ID = typeof process !== 'undefined' && process.env?.AIRTABLE_BASE_ID
+  ? process.env.AIRTABLE_BASE_ID
+  : import.meta.env.AIRTABLE_BASE_ID;
 
-// Debug logging (will show in Netlify function logs)
-if (!BASE_ID || !API_KEY) {
-  console.error('Missing Airtable credentials:', { BASE_ID: !!BASE_ID, API_KEY: !!API_KEY });
-}
+const API_KEY = typeof process !== 'undefined' && process.env?.AIRTABLE_API_KEY
+  ? process.env.AIRTABLE_API_KEY
+  : import.meta.env.AIRTABLE_API_KEY;
 
 const BASE_URL = `https://api.airtable.com/v0/${BASE_ID}`;
 

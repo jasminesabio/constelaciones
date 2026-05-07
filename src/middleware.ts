@@ -1,7 +1,9 @@
 import { defineMiddleware } from 'astro:middleware';
 import crypto from 'crypto';
 
-const PASSWORD = import.meta.env.CONSTELACIONES_PASSWORD || 'mexicocity';
+const PASSWORD = (typeof process !== 'undefined' && process.env?.CONSTELACIONES_PASSWORD)
+  ? process.env.CONSTELACIONES_PASSWORD
+  : (import.meta.env.CONSTELACIONES_PASSWORD || 'mexicocity');
 const COOKIE_SECRET = 'constelaciones-secret-key'; // In production, use a strong secret from env
 
 function hashPassword(password: string): string {
