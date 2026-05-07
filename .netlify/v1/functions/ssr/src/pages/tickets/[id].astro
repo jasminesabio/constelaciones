@@ -1,0 +1,109 @@
+---
+export const prerender = false;
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getTickets, getPeople } from '../../lib/airtable';
+
+const { id } = Astro.params;
+const tickets = await getTickets();
+const ticket = tickets.find((t: any) => t.airtableId === id);
+const people = await getPeople();
+
+if (!ticket) {
+  return Astro.redirect('/tickets');
+}
+
+const seller = people.find((p: any) => p.airtableId === ticket.seller_id);
+const eventDate = new Date(ticket.event_date).toLocaleDateString('en-US', {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<BaseLayout title={`${ticket.event_name} — Constelaciones`}>
+  <style>
+    .ticket-hero {
+      padding-block: 3rem;
+      background: var(--sand);
+    }
+
+    .ticket-hero h1 {
+      margin-bottom: 1rem;
+    }
+
+    .ticket-detail {
+      padding-block: var(--space-md);
+    }
+
+    .ticket-info {
+      background: white;
+      border: 1px solid var(--clay-lt);
+      padding: 2rem;
+      border-radius: 4px;
+      max-width: var(--text-max);
+    }
+
+    .info-row {
+      margin-bottom: 1.5rem;
+    }
+
+    .info-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--fog);
+      letter-spacing: 0.1em;
+      margin-bottom: 0.4rem;
+    }
+
+    .info-value {
+      font-size: 1rem;
+      color: var(--ink);
+    }
+
+    .ticket-price {
+      font-family: var(--serif);
+      font-size: 1.5rem;
+      font-weight: 500;
+      color: var(--clay);
+    }
+
+    .cta-row {
+      margin-top: 2rem;
+      display: flex;
+      gap: 1rem;
+    }
+  </style>
+
+  <section class="section ticket-hero">
+    <div class="wrap">
+      <h1>{ticket.event_name}</h1>
+      <div style="font-size: 0.95rem; color: var(--fog);">
+        {ticket.event_location} · {eventDate}
+      </div>
+    </div>
+  </section>
+
+  <section class="section ticket-detail">
+    <div class="wrap">
+      <div class="ticket-info">
+        <div class="info-row">
+          <div class="info-label">Price</div>
+          <div class="ticket-price">{ticket.asking_price}</div>
+        </div>
+
+        {ticket.notes && (
+          <div class="info-row">
+            <div class="info-label">Details</div>
+            <p class="info-value">{ticket.notes}</p>
+          </div>
+        )}
+
+        <div class="cta-row">
+          <a href="/tickets" class="btn-secondary">← Back to tickets</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

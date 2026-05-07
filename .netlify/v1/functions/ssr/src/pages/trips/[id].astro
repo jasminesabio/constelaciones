@@ -1,0 +1,137 @@
+---
+export const prerender = false;
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getTrips, getPeople } from '../../lib/airtable';
+
+const { id } = Astro.params;
+const trips = await getTrips('approved');
+const trip = trips.find((t: any) => t.airtableId === id);
+const people = await getPeople();
+
+if (!trip) {
+  return Astro.redirect('/trips');
+}
+
+const person = people.find((p: any) => p.name === trip.person_name);
+const startDate = new Date(trip.start_date).toLocaleDateString('en-US', {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+});
+const endDate = new Date(trip.end_date).toLocaleDateString('en-US', {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<BaseLayout title={`${trip.destination} — Constelaciones`}>
+  <style>
+    .trip-hero {
+      padding-block: 3rem;
+      background: var(--sand);
+    }
+
+    .trip-hero h1 {
+      margin-bottom: 0.5rem;
+    }
+
+    .trip-meta {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+      font-size: 0.95rem;
+    }
+
+    .trip-detail {
+      padding-block: var(--space-md);
+    }
+
+    .trip-card-info {
+      background: white;
+      border: 1px solid var(--clay-lt);
+      padding: 2rem;
+      border-radius: 4px;
+      max-width: var(--text-max);
+    }
+
+    .info-row {
+      margin-bottom: 1.5rem;
+    }
+
+    .info-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--fog);
+      letter-spacing: 0.1em;
+      margin-bottom: 0.4rem;
+    }
+
+    .info-value {
+      font-size: 1rem;
+      color: var(--ink);
+    }
+
+    .cta-row {
+      margin-top: 2rem;
+      display: flex;
+      gap: 1rem;
+    }
+
+    .trip-tag {
+      display: inline-block;
+      background: var(--sand);
+      color: var(--bark);
+      padding: 0.35rem 0.75rem;
+      border-radius: 2px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+  </style>
+
+  <section class="section trip-hero">
+    <div class="wrap">
+      <h1>{trip.destination}</h1>
+      {trip.event_tag && <span class="trip-tag">{trip.event_tag}</span>}
+      <div class="trip-meta">
+        <div>
+          <strong>When:</strong> {startDate} — {endDate}
+        </div>
+        {person && (
+          <div>
+            <strong>Who:</strong> <a href={`/friends/${(person as any).airtableId}`}>{person.name}</a>
+          </div>
+        )}
+      </div>
+    </div>
+  </section>
+
+  <section class="section trip-detail">
+    <div class="wrap">
+      <div class="trip-card-info">
+        {trip.notes && (
+          <div class="info-row">
+            <div class="info-label">Details</div>
+            <p class="info-value">{trip.notes}</p>
+          </div>
+        )}
+
+        {trip.last_updated && (
+          <div class="info-row">
+            <div class="info-label">Last updated</div>
+            <div class="info-value">{trip.last_updated}</div>
+          </div>
+        )}
+
+        <div class="cta-row">
+          <a href="/trips" class="btn-secondary">← Back to trips</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
