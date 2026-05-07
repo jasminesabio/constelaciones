@@ -1,12 +1,6 @@
-// In Netlify Functions (production), use process.env
-// In local dev, use import.meta.env
-const BASE_ID = typeof process !== 'undefined' && process.env?.AIRTABLE_BASE_ID
-  ? process.env.AIRTABLE_BASE_ID
-  : import.meta.env.AIRTABLE_BASE_ID;
-
-const API_KEY = typeof process !== 'undefined' && process.env?.AIRTABLE_API_KEY
-  ? process.env.AIRTABLE_API_KEY
-  : import.meta.env.AIRTABLE_API_KEY;
+// Access environment variables - works for both local dev and Netlify
+const BASE_ID = process.env.AIRTABLE_BASE_ID || import.meta.env.AIRTABLE_BASE_ID;
+const API_KEY = process.env.AIRTABLE_API_KEY || import.meta.env.AIRTABLE_API_KEY;
 
 const BASE_URL = `https://api.airtable.com/v0/${BASE_ID}`;
 
