@@ -1,0 +1,202 @@
+---
+export const prerender = false;
+
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getRecommendations } from '../lib/airtable';
+
+const recommendations = await getRecommendations();
+
+// Group recommendations by city
+const byCity = recommendations.reduce((acc, rec) => {
+  if (!acc[rec.city]) acc[rec.city] = [];
+  acc[rec.city].push(rec);
+  return acc;
+}, {} as Record<string, typeof recommendations>);
+
+// Sort cities alphabetically
+const cities = Object.keys(byCity).sort();
+---
+
+<BaseLayout title="Recommendations — Constelaciones">
+  <style>
+    .hero {
+      background: linear-gradient(175deg, var(--sand) 0%, var(--cream) 75%);
+      padding: 4rem 0 3rem;
+    }
+
+    .hero-content {
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--fog);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .recommendations-section {
+      padding: 3rem 0;
+    }
+
+    .city-section {
+      margin-bottom: 4rem;
+    }
+
+    .city-header {
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid var(--clay-lt);
+    }
+
+    .city-header h2 {
+      font-size: 1.75rem;
+      color: var(--bark);
+    }
+
+    .recommendations-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .rec-card {
+      background: white;
+      border: 1px solid var(--clay-lt);
+      border-radius: 4px;
+      padding: 1.5rem;
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+
+    .rec-card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      transform: translateY(-2px);
+    }
+
+    .rec-category {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 3px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.75rem;
+    }
+
+    .rec-category.eat { background: #ffe5d9; color: #c4572d; }
+    .rec-category.drink { background: #d9e5ff; color: #2d57c4; }
+    .rec-category.see { background: #e5d9ff; color: #572dc4; }
+    .rec-category.do { background: #d9ffe5; color: #2dc457; }
+    .rec-category.stay { background: #fff4d9; color: #c4a32d; }
+    .rec-category.other { background: var(--clay-lt); color: var(--bark); }
+
+    .rec-card h3 {
+      font-size: 1.3rem;
+      margin-bottom: 0.5rem;
+      color: var(--bark);
+    }
+
+    .rec-card p {
+      font-size: 0.95rem;
+      color: var(--fog);
+      line-height: 1.6;
+      margin-bottom: 0.75rem;
+    }
+
+    .rec-meta {
+      font-size: 0.85rem;
+      color: var(--fog);
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .rec-address {
+      color: var(--clay);
+    }
+
+    .rec-link {
+      color: var(--clay);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .rec-link:hover {
+      text-decoration: underline;
+    }
+
+    .rec-submitted {
+      font-style: italic;
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--clay-lt);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--fog);
+    }
+
+    .empty-state h2 {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      color: var(--bark);
+    }
+  </style>
+
+  <section class="hero">
+    <div class="wrap hero-content">
+      <h1>Recommendations</h1>
+      <p>Places to eat, drink, see, do, and stay across Europe this summer</p>
+    </div>
+  </section>
+
+  <section class="recommendations-section">
+    <div class="wrap">
+      {recommendations.length === 0 ? (
+        <div class="empty-state">
+          <h2>No recommendations yet</h2>
+          <p>Recommendations will appear here as they're added</p>
+        </div>
+      ) : (
+        cities.map((city) => (
+          <div class="city-section">
+            <div class="city-header">
+              <h2>{city}</h2>
+            </div>
+            <div class="recommendations-grid">
+              {byCity[city].map((rec) => (
+                <div class="rec-card">
+                  <span class={`rec-category ${rec.category}`}>{rec.category}</span>
+                  <h3>{rec.name}</h3>
+                  {rec.description && <p>{rec.description}</p>}
+                  <div class="rec-meta">
+                    {rec.address && <div class="rec-address">📍 {rec.address}</div>}
+                    {rec.url && (
+                      <div>
+                        <a href={rec.url} target="_blank" rel="noopener noreferrer" class="rec-link">
+                          Visit website →
+                        </a>
+                      </div>
+                    )}
+                    {rec.notes && <div>{rec.notes}</div>}
+                    {rec.submitted_by && (
+                      <div class="rec-submitted">Recommended by {rec.submitted_by}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  </section>
+</BaseLayout>

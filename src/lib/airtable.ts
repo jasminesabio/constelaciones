@@ -97,6 +97,19 @@ export type Submission = {
   updated_at?: string;
 };
 
+export type Recommendation = {
+  id: string;
+  city: string;
+  category: 'eat' | 'drink' | 'see' | 'do' | 'stay' | 'other';
+  name: string;
+  description?: string;
+  address?: string;
+  url?: string;
+  submitted_by?: string;
+  notes?: string;
+  status?: 'approved' | 'pending';
+};
+
 async function fetchAirtable<T>(
   tableName: string,
   options: { view?: string; filterByFormula?: string } = {}
@@ -247,4 +260,19 @@ export async function createTicket(ticket: Omit<Ticket, 'id'>) {
   }
 
   return await response.json();
+}
+
+export async function getRecommendations(city?: string, category?: string): Promise<Recommendation[]> {
+  let filterFormula = '{status} = "approved"';
+
+  if (city) {
+    filterFormula = `AND(${filterFormula}, {city} = "${city}")`;
+  }
+
+  if (category) {
+    filterFormula = `AND(${filterFormula}, {category} = "${category}")`;
+  }
+
+  const records = await fetchAirtable<Recommendation>('Recommendations', { filterByFormula: filterFormula });
+  return records.map((r) => ({ ...r.fields, id: r.id }));
 }
