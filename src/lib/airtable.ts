@@ -1,8 +1,15 @@
-// Access environment variables - works for both local dev and Netlify
-const BASE_ID = process.env.AIRTABLE_BASE_ID || import.meta.env.AIRTABLE_BASE_ID;
-const API_KEY = process.env.AIRTABLE_API_KEY || import.meta.env.AIRTABLE_API_KEY;
+// Lazy getters to ensure env vars are accessed when needed, not at module load time
+function getBaseId() {
+  return process.env.AIRTABLE_BASE_ID || import.meta.env.AIRTABLE_BASE_ID;
+}
 
-const BASE_URL = `https://api.airtable.com/v0/${BASE_ID}`;
+function getApiKey() {
+  return process.env.AIRTABLE_API_KEY || import.meta.env.AIRTABLE_API_KEY;
+}
+
+function getBaseUrl() {
+  return `https://api.airtable.com/v0/${getBaseId()}`;
+}
 
 type AirtableRecord<T> = {
   id: string;
@@ -98,16 +105,19 @@ async function fetchAirtable<T>(
   if (options.view) params.append('view', options.view);
   if (options.filterByFormula) params.append('filterByFormula', options.filterByFormula);
 
-  const url = `${BASE_URL}/${tableName}?${params}`;
+  const baseUrl = getBaseUrl();
+  const apiKey = getApiKey();
+  const url = `${baseUrl}/${tableName}?${params}`;
 
   console.log(`[Airtable] Fetching ${tableName}...`, {
-    baseUrl: BASE_URL?.substring(0, 30),
-    hasApiKey: !!API_KEY
+    baseUrl: baseUrl?.substring(0, 50),
+    baseIdLength: getBaseId()?.length,
+    hasApiKey: !!apiKey
   });
 
   const response = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
   });
 
@@ -158,10 +168,10 @@ export async function getSubmissions(status?: string): Promise<Submission[]> {
 }
 
 export async function createSubmission(submission: Omit<Submission, 'id' | 'created_at' | 'updated_at'>) {
-  const response = await fetch(`${BASE_URL}/Submissions`, {
+  const response = await fetch(`${getBaseUrl()}/Submissions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${getApiKey()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -185,10 +195,10 @@ export async function createSubmission(submission: Omit<Submission, 'id' | 'crea
 
 // Helper functions for seeding data
 export async function createPerson(person: Omit<Person, 'id'>) {
-  const response = await fetch(`${BASE_URL}/People`, {
+  const response = await fetch(`${getBaseUrl()}/People`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${getApiKey()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ fields: person }),
@@ -203,10 +213,10 @@ export async function createPerson(person: Omit<Person, 'id'>) {
 }
 
 export async function createTrip(trip: Omit<Trip, 'id'>) {
-  const response = await fetch(`${BASE_URL}/Trips`, {
+  const response = await fetch(`${getBaseUrl()}/Trips`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${getApiKey()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ fields: trip }),
@@ -221,10 +231,10 @@ export async function createTrip(trip: Omit<Trip, 'id'>) {
 }
 
 export async function createTicket(ticket: Omit<Ticket, 'id'>) {
-  const response = await fetch(`${BASE_URL}/Tickets`, {
+  const response = await fetch(`${getBaseUrl()}/Tickets`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${getApiKey()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ fields: ticket }),
