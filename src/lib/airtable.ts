@@ -112,7 +112,8 @@ async function fetchAirtable<T>(
   console.log(`[Airtable] Fetching ${tableName}...`, {
     baseUrl: baseUrl?.substring(0, 50),
     baseIdLength: getBaseId()?.length,
-    hasApiKey: !!apiKey
+    apiKeyLength: apiKey?.length,
+    apiKeyPrefix: apiKey?.substring(0, 6)
   });
 
   const response = await fetch(url, {
