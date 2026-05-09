@@ -4,199 +4,378 @@ export const prerender = false;
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { getRecommendations } from '../lib/airtable';
 
-const recommendations = await getRecommendations();
+const recs = await getRecommendations();
 
-// Group recommendations by city
-const byCity = recommendations.reduce((acc, rec) => {
+// Group by city
+const byCity = recs.reduce((acc, rec) => {
   if (!acc[rec.city]) acc[rec.city] = [];
   acc[rec.city].push(rec);
   return acc;
-}, {} as Record<string, typeof recommendations>);
+}, {} as Record<string, typeof recs>);
 
-// Sort cities alphabetically
 const cities = Object.keys(byCity).sort();
+
+const CAT_ORDER = ['eat', 'drink', 'see', 'do', 'stay', 'other'] as const;
+const usedCats = CAT_ORDER.filter(c => recs.some(r => r.category === c));
+
+function slug(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function cityStats(cityRecs: typeof recs) {
+  return CAT_ORDER
+    .map(c => ({ cat: c, n: cityRecs.filter(r => r.category === c).length }))
+    .filter(x => x.n > 0);
+}
+
+function sorted(cityRecs: typeof recs) {
+  return [...cityRecs].sort((a, b) =>
+    CAT_ORDER.indexOf((a.category ?? 'other') as any) -
+    CAT_ORDER.indexOf((b.category ?? 'other') as any)
+  );
+}
 ---
 
 <BaseLayout title="Recommendations — Constelaciones">
   <style>
+    /* ── Hero ─────────────────────────────────────── */
     .hero {
-      background: linear-gradient(175deg, var(--sand) 0%, var(--cream) 75%);
-      padding: 4rem 0 3rem;
+      padding: 2.5rem 0 2rem;
+      background: linear-gradient(175deg, var(--sand) 0%, var(--cream) 80%);
+      border-bottom: 1px solid var(--clay-lt);
+    }
+    .hero h1 { margin-bottom: 0.35rem; }
+    .hero p  { color: var(--fog); font-size: 1rem; max-width: none; }
+
+    /* ── Sticky filter bar ────────────────────────── */
+    .filter-bar {
+      position: sticky;
+      top: 53px;
+      z-index: 90;
+      background: rgba(253, 250, 245, 0.97);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--clay-lt);
+      padding: 0.65rem 0;
     }
 
-    .hero-content {
-      text-align: center;
-    }
-
-    .hero h1 {
-      font-size: 2.5rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .hero p {
-      font-size: 1.15rem;
-      color: var(--fog);
-      max-width: 600px;
-      margin: 0 auto;
-    }
-
-    .recommendations-section {
-      padding: 3rem 0;
-    }
-
-    .city-section {
-      margin-bottom: 4rem;
-    }
-
-    .city-header {
-      margin-bottom: 1.5rem;
-      padding-bottom: 0.75rem;
-      border-bottom: 2px solid var(--clay-lt);
-    }
-
-    .city-header h2 {
-      font-size: 1.75rem;
-      color: var(--bark);
-    }
-
-    .recommendations-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 1.5rem;
-    }
-
-    .rec-card {
-      background: white;
-      border: 1px solid var(--clay-lt);
-      border-radius: 4px;
-      padding: 1.5rem;
-      transition: box-shadow 0.2s, transform 0.2s;
-    }
-
-    .rec-card:hover {
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-      transform: translateY(-2px);
-    }
-
-    .rec-category {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      border-radius: 3px;
-      font-size: 0.8rem;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 0.75rem;
-    }
-
-    .rec-category.eat { background: #ffe5d9; color: #c4572d; }
-    .rec-category.drink { background: #d9e5ff; color: #2d57c4; }
-    .rec-category.see { background: #e5d9ff; color: #572dc4; }
-    .rec-category.do { background: #d9ffe5; color: #2dc457; }
-    .rec-category.stay { background: #fff4d9; color: #c4a32d; }
-    .rec-category.other { background: var(--clay-lt); color: var(--bark); }
-
-    .rec-card h3 {
-      font-size: 1.3rem;
-      margin-bottom: 0.5rem;
-      color: var(--bark);
-    }
-
-    .rec-card p {
-      font-size: 0.95rem;
-      color: var(--fog);
-      line-height: 1.6;
-      margin-bottom: 0.75rem;
-    }
-
-    .rec-meta {
-      font-size: 0.85rem;
-      color: var(--fog);
+    .filter-row {
       display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
+      align-items: center;
+      gap: 0.4rem;
+      overflow-x: auto;
+      scrollbar-width: none;
     }
-
-    .rec-address {
-      color: var(--clay);
-    }
-
-    .rec-link {
-      color: var(--clay);
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    .rec-link:hover {
-      text-decoration: underline;
-    }
-
-    .rec-submitted {
-      font-style: italic;
+    .filter-row::-webkit-scrollbar { display: none; }
+    .filter-row + .filter-row {
       margin-top: 0.5rem;
       padding-top: 0.5rem;
-      border-top: 1px solid var(--clay-lt);
+      border-top: 1px solid rgba(232, 195, 176, 0.4);
     }
 
-    .empty-state {
-      text-align: center;
-      padding: 4rem 2rem;
+    .filter-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
       color: var(--fog);
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-right: 0.2rem;
     }
 
-    .empty-state h2 {
-      font-size: 1.5rem;
-      margin-bottom: 1rem;
+    .f-btn {
+      flex-shrink: 0;
+      padding: 0.28rem 0.7rem;
+      border-radius: 99px;
+      font-family: var(--sans);
+      font-size: 0.78rem;
+      font-weight: 500;
+      border: 1.5px solid var(--clay-lt);
+      background: transparent;
+      color: var(--fog);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      white-space: nowrap;
+      line-height: 1.4;
+    }
+    .f-btn:hover { border-color: var(--clay); color: var(--bark); }
+
+    /* city active */
+    .f-btn.active[data-city-btn] {
+      background: var(--bark);
+      border-color: var(--bark);
+      color: var(--cream);
+    }
+    /* category active — each gets its own color */
+    .f-btn.active[data-cat-btn="all"]   { background: var(--bark);  border-color: var(--bark);  color: var(--cream); }
+    .f-btn.active[data-cat-btn="eat"]   { background: #c4572d; border-color: #c4572d; color: #fff; }
+    .f-btn.active[data-cat-btn="drink"] { background: #2d57c4; border-color: #2d57c4; color: #fff; }
+    .f-btn.active[data-cat-btn="see"]   { background: #572dc4; border-color: #572dc4; color: #fff; }
+    .f-btn.active[data-cat-btn="do"]    { background: #2d7c45; border-color: #2d7c45; color: #fff; }
+    .f-btn.active[data-cat-btn="stay"]  { background: #c4a32d; border-color: #c4a32d; color: #fff; }
+    .f-btn.active[data-cat-btn="other"] { background: var(--bark); border-color: var(--bark); color: var(--cream); }
+
+    /* ── Content area ─────────────────────────────── */
+    .recs-content { padding: 2.5rem 0 5rem; }
+
+    .city-section { margin-bottom: 3.5rem; }
+
+    .city-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      padding-bottom: 0.55rem;
+      border-bottom: 2px solid var(--clay-lt);
+      margin-bottom: 0.15rem;
+      flex-wrap: wrap;
+    }
+    .city-header h2 { font-size: 1.35rem; margin: 0; }
+
+    .city-stats {
+      font-size: 0.75rem;
+      color: var(--fog);
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .city-stats span { white-space: nowrap; }
+    .city-stats .sep { color: var(--clay-lt); }
+
+    /* ── Rec rows ─────────────────────────────────── */
+    .rec-row {
+      display: flex;
+      align-items: baseline;
+      gap: 0.85rem;
+      padding: 0.5rem 0.5rem;
+      border-bottom: 1px solid rgba(232, 195, 176, 0.3);
+      border-radius: 3px;
+      margin: 0 -0.5rem;
+      transition: background 0.12s;
+    }
+    .rec-row:hover { background: var(--sand); }
+
+    .rec-pill {
+      flex: 0 0 2.9rem;
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      padding: 0.2rem 0;
+      border-radius: 2px;
+      text-align: center;
+      align-self: flex-start;
+      margin-top: 0.15rem;
+    }
+    .rec-pill.eat   { background: #ffe5d9; color: #c4572d; }
+    .rec-pill.drink { background: #d9e5ff; color: #2d57c4; }
+    .rec-pill.see   { background: #e5d9ff; color: #572dc4; }
+    .rec-pill.do    { background: #d9ffe5; color: #2d7c45; }
+    .rec-pill.stay  { background: #fff4d9; color: #c4a32d; }
+    .rec-pill.other { background: var(--clay-lt); color: var(--bark); }
+
+    .rec-name-wrap {
+      flex: 0 0 27%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      align-self: flex-start;
+      min-width: 0;
+    }
+
+    .rec-name {
+      font-weight: 500;
+      font-size: 0.9rem;
       color: var(--bark);
+      line-height: 1.35;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .rec-name:hover { color: var(--clay); }
+    .rec-name .map-icon {
+      font-size: 0.7rem;
+      opacity: 0;
+      transition: opacity 0.15s;
+      flex-shrink: 0;
+    }
+    .rec-row:hover .rec-name .map-icon { opacity: 1; }
+
+    .rec-hood {
+      font-size: 0.72rem;
+      color: var(--fog);
+      font-style: italic;
+    }
+
+    .rec-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .rec-desc {
+      font-size: 0.875rem;
+      color: var(--fog);
+      line-height: 1.5;
+      max-width: none;
+    }
+    .rec-notes {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--clay);
+      margin-top: 0.15rem;
+      font-style: italic;
+    }
+
+    .empty-msg {
+      padding: 1.25rem 0.5rem;
+      font-size: 0.875rem;
+      color: var(--fog);
+      font-style: italic;
+    }
+
+    /* ── Mobile ───────────────────────────────────── */
+    @media (max-width: 640px) {
+      .filter-bar { top: 0; }
+      .rec-name-wrap { flex: 0 0 38%; }
+      .city-header { flex-direction: column; gap: 0.25rem; }
     }
   </style>
 
   <section class="hero">
-    <div class="wrap hero-content">
+    <div class="wrap">
       <h1>Recommendations</h1>
-      <p>Places to eat, drink, see, do, and stay across Europe this summer</p>
+      <p>{recs.length} picks across {cities.length} {cities.length === 1 ? 'city' : 'cities'} — from the group</p>
     </div>
   </section>
 
-  <section class="recommendations-section">
+  <div class="filter-bar">
     <div class="wrap">
-      {recommendations.length === 0 ? (
-        <div class="empty-state">
-          <h2>No recommendations yet</h2>
-          <p>Recommendations will appear here as they're added</p>
-        </div>
-      ) : (
-        cities.map((city) => (
-          <div class="city-section">
+      <!-- City filter -->
+      <div class="filter-row">
+        <span class="filter-label">City</span>
+        <button class="f-btn active" data-city-btn="all">All</button>
+        {cities.map(city => (
+          <button class="f-btn" data-city-btn={slug(city)}>
+            {city.split(',')[0]}
+          </button>
+        ))}
+      </div>
+      <!-- Category filter -->
+      <div class="filter-row">
+        <span class="filter-label">Type</span>
+        <button class="f-btn active" data-cat-btn="all">All</button>
+        {usedCats.map(cat => (
+          <button class="f-btn" data-cat-btn={cat}>{cat}</button>
+        ))}
+      </div>
+    </div>
+  </div>
+
+  <section class="recs-content">
+    <div class="wrap">
+      {cities.length === 0 ? (
+        <div class="empty-msg">No recommendations yet — check back soon!</div>
+      ) : cities.map(city => {
+        const cityRecs = sorted(byCity[city]);
+        const stats = cityStats(byCity[city]);
+        return (
+          <div class="city-section" data-city-section={slug(city)}>
             <div class="city-header">
               <h2>{city}</h2>
+              <div class="city-stats">
+                {stats.map((s, i) => (
+                  <>
+                    {i > 0 && <span class="sep">·</span>}
+                    <span>{s.n} {s.cat}</span>
+                  </>
+                ))}
+              </div>
             </div>
-            <div class="recommendations-grid">
-              {byCity[city].map((rec) => (
-                <div class="rec-card">
-                  <span class={`rec-category ${rec.category}`}>{rec.category}</span>
-                  <h3>{rec.name}</h3>
-                  {rec.description && <p>{rec.description}</p>}
-                  <div class="rec-meta">
-                    {rec.address && <div class="rec-address">📍 {rec.address}</div>}
-                    {rec.url && (
-                      <div>
-                        <a href={rec.url} target="_blank" rel="noopener noreferrer" class="rec-link">
-                          Visit website →
-                        </a>
-                      </div>
+
+            {cityRecs.map(rec => {
+              const mapsHref = rec.maps_url
+                ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rec.name + ' ' + city)}`;
+              return (
+                <div
+                  class="rec-row"
+                  data-rec
+                  data-city={slug(city)}
+                  data-category={rec.category ?? 'other'}
+                >
+                  <span class={`rec-pill ${rec.category ?? 'other'}`}>
+                    {rec.category ?? 'other'}
+                  </span>
+                  <div class="rec-name-wrap">
+                    <a class="rec-name" href={mapsHref} target="_blank" rel="noopener noreferrer">
+                      {rec.name}
+                      <span class="map-icon">↗</span>
+                    </a>
+                    {rec.neighborhood && (
+                      <span class="rec-hood">{rec.neighborhood}</span>
                     )}
-                    {rec.notes && <div>{rec.notes}</div>}
-                    {rec.submitted_by && (
-                      <div class="rec-submitted">Recommended by {rec.submitted_by}</div>
+                  </div>
+                  <div class="rec-body">
+                    {rec.description && (
+                      <p class="rec-desc">{rec.description}</p>
+                    )}
+                    {rec.notes && (
+                      <em class="rec-notes">{rec.notes}</em>
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
+
+            <p class="empty-msg" data-empty-for={slug(city)} style="display:none">
+              No recommendations in this category for {city}.
+            </p>
           </div>
-        ))
-      )}
+        );
+      })}
     </div>
   </section>
+
+  <script>
+    const cityBtns = document.querySelectorAll<HTMLButtonElement>('[data-city-btn]');
+    const catBtns  = document.querySelectorAll<HTMLButtonElement>('[data-cat-btn]');
+    const sections = document.querySelectorAll<HTMLElement>('[data-city-section]');
+
+    let activeCity = 'all';
+    let activeCat  = 'all';
+
+    function applyFilters() {
+      sections.forEach(section => {
+        const city = section.dataset.citySection!;
+        const cityMatch = activeCity === 'all' || city === activeCity;
+        (section as HTMLElement).style.display = cityMatch ? '' : 'none';
+        if (!cityMatch) return;
+
+        let visible = 0;
+        section.querySelectorAll<HTMLElement>('[data-rec]').forEach(row => {
+          const catMatch = activeCat === 'all' || row.dataset.category === activeCat;
+          row.style.display = catMatch ? '' : 'none';
+          if (catMatch) visible++;
+        });
+
+        const emptyMsg = section.querySelector<HTMLElement>('[data-empty-for]');
+        if (emptyMsg) emptyMsg.style.display = visible === 0 ? 'block' : 'none';
+      });
+    }
+
+    cityBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeCity = btn.dataset.cityBtn!;
+        cityBtns.forEach(b => b.classList.toggle('active', b === btn));
+        applyFilters();
+      });
+    });
+
+    catBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeCat = btn.dataset.catBtn!;
+        catBtns.forEach(b => b.classList.toggle('active', b === btn));
+        applyFilters();
+      });
+    });
+  </script>
 </BaseLayout>

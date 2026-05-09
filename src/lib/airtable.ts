@@ -103,7 +103,9 @@ export type Recommendation = {
   category: 'eat' | 'drink' | 'see' | 'do' | 'stay' | 'other';
   name: string;
   description?: string;
+  neighborhood?: string;
   address?: string;
+  maps_url?: string;
   url?: string;
   submitted_by?: string;
   notes?: string;
