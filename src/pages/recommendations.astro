@@ -13,8 +13,6 @@ const byCity = recs.reduce((acc, rec) => {
   return acc;
 }, {} as Record<string, typeof recs>);
 
-const cities = Object.keys(byCity).sort();
-
 const CAT_ORDER = ['eat', 'drink', 'see', 'do', 'stay', 'other'] as const;
 const usedCats = CAT_ORDER.filter(c => recs.some(r => r.category === c));
 
@@ -43,6 +41,12 @@ const friendGuides = [
     by: 'Dan',
   },
 ];
+
+// All cities to render: union of recs cities + guide-only cities
+const allCities = [...new Set([
+  ...Object.keys(byCity),
+  ...friendGuides.map(g => g.city),
+])].sort();
 ---
 
 <BaseLayout title="Recommendations — Constelaciones">
@@ -284,7 +288,7 @@ const friendGuides = [
   <section class="hero">
     <div class="wrap">
       <h1>Recommendations</h1>
-      <p>{recs.length} picks across {cities.length} {cities.length === 1 ? 'city' : 'cities'} — from the group</p>
+      <p>{recs.length} picks across {allCities.length} {allCities.length === 1 ? 'city' : 'cities'} — from the group</p>
     </div>
   </section>
 
@@ -294,7 +298,7 @@ const friendGuides = [
       <div class="filter-row">
         <span class="filter-label">City</span>
         <button class="f-btn active" data-city-btn="all">All</button>
-        {cities.map(city => (
+        {allCities.map(city => (
           <button class="f-btn" data-city-btn={slug(city)}>
             {city.split(',')[0]}
           </button>
@@ -313,11 +317,11 @@ const friendGuides = [
 
   <section class="recs-content">
     <div class="wrap">
-      {cities.length === 0 ? (
+      {allCities.length === 0 ? (
         <div class="empty-msg">No recommendations yet — check back soon!</div>
-      ) : cities.map(city => {
-        const cityRecs = sorted(byCity[city]);
-        const stats = cityStats(byCity[city]);
+      ) : allCities.map(city => {
+        const cityRecs = sorted(byCity[city] ?? []);
+        const stats = cityStats(byCity[city] ?? []);
         return (
           <div class="city-section" data-city-section={slug(city)}>
             <div class="city-header">
