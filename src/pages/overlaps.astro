@@ -2,275 +2,240 @@
 export const prerender = false;
 
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { getTrips, getPeople } from '../lib/airtable';
+import { getTrips } from '../lib/airtable';
 
 const trips = await getTrips('approved');
-const people = await getPeople();
 
-// Calculate overlaps
-type Overlap = {
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+const todayStr = today.toISOString().split('T')[0];
+
+type OverlapGroup = {
   destination: string;
   people: string[];
   startDate: string;
   endDate: string;
 };
 
-const overlaps: Overlap[] = [];
+// Group trips by destination
+const byDest = new Map<string, typeof trips>();
+for (const trip of trips) {
+  if (!byDest.has(trip.destination)) byDest.set(trip.destination, []);
+  byDest.get(trip.destination)!.push(trip);
+}
 
-for (let i = 0; i < trips.length; i++) {
-  for (let j = i + 1; j < trips.length; j++) {
-    const trip1 = trips[i];
-    const trip2 = trips[j];
+// Sweep-line: for each destination, find all intervals where 2+ people overlap
+const rawOverlaps: OverlapGroup[] = [];
 
-    // Check if same destination
-    if (trip1.destination === trip2.destination) {
-      const start1 = new Date(trip1.start_date);
-      const end1 = new Date(trip1.end_date);
-      const start2 = new Date(trip2.start_date);
-      const end2 = new Date(trip2.end_date);
+for (const [destination, destTrips] of byDest) {
+  if (destTrips.length < 2) continue;
 
-      // Check if dates overlap
-      if (start1 <= end2 && start2 <= end1) {
-        const person1 = trip1.person_name || 'Unknown';
-        const person2 = trip2.person_name || 'Unknown';
+  // Collect all boundary dates as interval breakpoints
+  const dates = new Set<string>();
+  for (const t of destTrips) {
+    dates.add(t.start_date);
+    dates.add(t.end_date);
+  }
+  const sorted = [...dates].sort();
 
-        // Don't show overlaps for the same person
-        if (person1 === person2) continue;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const iStart = sorted[i];
+    const iEnd   = sorted[i + 1];
 
-        const overlapStart = new Date(Math.max(start1.getTime(), start2.getTime()));
-        const overlapEnd = new Date(Math.min(end1.getTime(), end2.getTime()));
+    // Skip intervals fully in the past
+    if (iEnd <= todayStr) continue;
 
-        overlaps.push({
-          destination: trip1.destination,
-          people: [person1, person2],
-          startDate: overlapStart.toISOString().split('T')[0],
-          endDate: overlapEnd.toISOString().split('T')[0],
-        });
-      }
+    const present = destTrips
+      .filter(t => t.start_date <= iStart && t.end_date >= iEnd)
+      .map(t => t.person_name!)
+      .filter(Boolean);
+
+    if (present.length >= 2) {
+      rawOverlaps.push({ destination, people: present, startDate: iStart, endDate: iEnd });
     }
   }
 }
 
-// Sort by date
-overlaps.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+// Merge consecutive intervals with same destination + same people set
+rawOverlaps.sort((a, b) =>
+  a.destination.localeCompare(b.destination) || a.startDate.localeCompare(b.startDate)
+);
 
-// Get unique destinations for filter
-const destinations = [...new Set(overlaps.map((o) => o.destination))];
+const merged: OverlapGroup[] = [];
+for (const o of rawOverlaps) {
+  const last = merged[merged.length - 1];
+  const sameGroup =
+    last &&
+    last.destination === o.destination &&
+    last.endDate === o.startDate &&
+    JSON.stringify([...last.people].sort()) === JSON.stringify([...o.people].sort());
+
+  if (sameGroup) {
+    last.endDate = o.endDate;
+  } else {
+    merged.push({ ...o, people: [...o.people] });
+  }
+}
+
+// Sort chronologically
+merged.sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+// Group by month
+const byMonth = new Map<string, OverlapGroup[]>();
+for (const o of merged) {
+  const month = new Date(o.startDate + 'T12:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  if (!byMonth.has(month)) byMonth.set(month, []);
+  byMonth.get(month)!.push(o);
+}
+
+function formatRange(start: string, end: string) {
+  const s = new Date(start + 'T12:00:00');
+  const e = new Date(end   + 'T12:00:00');
+  const mo = (d: Date) => d.toLocaleString('en-US', { month: 'short' });
+  if (s.getMonth() === e.getMonth()) return `${mo(s)} ${s.getDate()}–${e.getDate()}`;
+  return `${mo(s)} ${s.getDate()} – ${mo(e)} ${e.getDate()}`;
+}
+
+const totalCount = merged.length;
 ---
 
 <BaseLayout title="Constelaciones — Overlaps">
   <style>
-    .page-header {
-      padding-block: 3rem;
-      background: var(--sand);
-    }
-
-    .page-header h1 {
-      margin-bottom: 0.5rem;
-    }
-
-    .tabs {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 2rem;
+    /* ── Hero ─────────────────────────────────────── */
+    .hero {
+      padding: 2.5rem 0 2rem;
+      background: linear-gradient(175deg, var(--sand) 0%, var(--cream) 80%);
       border-bottom: 1px solid var(--clay-lt);
     }
+    .hero h1 { margin-bottom: 0.35rem; }
+    .hero p  { color: var(--fog); font-size: 1rem; max-width: none; }
 
-    .tab-btn {
-      background: none;
-      border: none;
-      padding: 1rem 0;
-      font-size: 0.95rem;
-      font-weight: 500;
-      color: var(--fog);
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: color 0.2s;
-    }
+    /* ── Content ──────────────────────────────────── */
+    .content { padding: 2.5rem 0 5rem; }
 
-    .tab-btn.active {
-      color: var(--bark);
-      border-color: var(--clay);
-    }
+    /* ── Month group ──────────────────────────────── */
+    .month-group { margin-bottom: 2.5rem; }
 
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
-
-    .timeline {
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
-
-    .timeline-item {
-      background: white;
-      border: 1px solid var(--clay-lt);
-      border-left: 3px solid var(--clay);
-      padding: 1.5rem;
-      border-radius: 4px;
-    }
-
-    .timeline-destination {
-      font-family: var(--serif);
-      font-size: 1.15rem;
-      color: var(--bark);
-      margin-bottom: 0.5rem;
-    }
-
-    .timeline-people {
+    .month-label {
+      font-size: 0.68rem;
       font-weight: 600;
-      color: var(--ink);
-      margin-bottom: 0.75rem;
-    }
-
-    .timeline-dates {
-      font-size: 0.9rem;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
       color: var(--fog);
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--clay-lt);
+      margin-bottom: 0.15rem;
     }
 
-    .map-placeholder {
+    /* ── Overlap rows ─────────────────────────────── */
+    .overlap-row {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      padding: 0.55rem 0.5rem;
+      border-bottom: 1px solid rgba(232, 195, 176, 0.3);
+      border-radius: 3px;
+      margin: 0 -0.5rem;
+      transition: background 0.12s;
+    }
+    .overlap-row:hover { background: var(--sand); }
+
+    .col-dates {
+      flex: 0 0 110px;
+      font-size: 0.82rem;
+      color: var(--fog);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .col-dest {
+      flex: 0 0 210px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      color: var(--bark);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .col-people {
+      flex: 1;
+      font-size: 0.875rem;
+      color: var(--fog);
+      min-width: 0;
+    }
+
+    .person-tag {
+      display: inline-block;
       background: var(--sand);
       border: 1px solid var(--clay-lt);
-      border-radius: 4px;
-      padding: 4rem;
-      text-align: center;
-      color: var(--fog);
-      margin-top: 2rem;
+      border-radius: 99px;
+      padding: 0.1rem 0.55rem;
+      font-size: 0.78rem;
+      color: var(--bark);
+      margin: 0.1rem 0.15rem 0.1rem 0;
+      white-space: nowrap;
+    }
+
+    .count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.4rem;
+      height: 1.4rem;
+      border-radius: 50%;
+      background: var(--clay);
+      color: white;
+      font-size: 0.65rem;
+      font-weight: 700;
+      margin-right: 0.4rem;
+      flex-shrink: 0;
+      vertical-align: middle;
     }
 
     .empty-state {
-      text-align: center;
-      padding: 3rem 1rem;
+      padding: 3rem 0;
       color: var(--fog);
+      font-style: italic;
     }
 
-    .filter-group {
-      margin-bottom: 1.5rem;
-    }
-
-    .filter-group label {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .filter-group select {
-      max-width: 300px;
-      padding: 0.5rem;
-      border: 1px solid var(--clay-lt);
-      border-radius: 3px;
+    @media (max-width: 600px) {
+      .col-dest { flex: 0 0 140px; }
+      .col-dates { flex: 0 0 80px; font-size: 0.75rem; }
     }
   </style>
 
-  <section class="section page-header">
+  <section class="hero">
     <div class="wrap">
       <h1>Próximos cruces</h1>
-      <p>When and where friends will overlap this summer</p>
+      <p>{totalCount} overlap{totalCount === 1 ? '' : 's'} from today through the summer</p>
     </div>
   </section>
 
-  <section class="section">
+  <section class="content">
     <div class="wrap">
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="timeline">Timeline</button>
-        <button class="tab-btn" data-tab="map">Map</button>
-      </div>
+      {byMonth.size === 0 ? (
+        <p class="empty-state">No upcoming overlaps found.</p>
+      ) : [...byMonth.entries()].map(([month, overlaps]) => (
+        <div class="month-group">
+          <div class="month-label">{month}</div>
 
-      <div class="tab-content active" id="timeline" data-tab="timeline">
-        {overlaps.length > 0 ? (
-          <>
-            <div class="filter-group">
-              <label for="destination-filter">Filter by destination</label>
-              <select id="destination-filter">
-                <option value="">All destinations</option>
-                {destinations.map((d) => (
-                  <option value={d}>{d}</option>
+          {overlaps.map(o => (
+            <div class="overlap-row">
+              <span class="col-dates">{formatRange(o.startDate, o.endDate)}</span>
+              <span class="col-dest" title={o.destination}>{o.destination}</span>
+              <span class="col-people">
+                {o.people.length >= 3 && (
+                  <span class="count-badge">{o.people.length}</span>
+                )}
+                {o.people.map(name => (
+                  <span class="person-tag">{name}</span>
                 ))}
-              </select>
+              </span>
             </div>
-
-            <div class="timeline">
-              {overlaps.map((overlap) => {
-                const startDate = new Date(overlap.startDate).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                });
-                const endDate = new Date(overlap.endDate).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                });
-                return (
-                  <div class="timeline-item" data-destination={overlap.destination}>
-                    <div class="timeline-destination">{overlap.destination}</div>
-                    <div class="timeline-people">
-                      {overlap.people.join(' ↔ ')}
-                    </div>
-                    <div class="timeline-dates">
-                      {startDate} — {endDate}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <div class="empty-state">
-            <p>No overlaps scheduled yet. Add trips to see when friends will cross paths.</p>
-          </div>
-        )}
-      </div>
-
-      <div class="tab-content" id="map" data-tab="map">
-        <div class="map-placeholder">
-          <p>Interactive map coming soon.</p>
-          <p style="font-size: 0.9rem; margin-top: 1rem;">
-            In the meantime, check the timeline to see where everyone's converging.
-          </p>
+          ))}
         </div>
-      </div>
+      ))}
     </div>
   </section>
-
-  <script>
-    // Tab switching
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    const tabContents = document.querySelectorAll('.tab-content');
-
-    tabBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const tabName = btn.getAttribute('data-tab');
-
-        // Hide all
-        tabContents.forEach((content) => content.classList.remove('active'));
-        tabBtns.forEach((b) => b.classList.remove('active'));
-
-        // Show selected
-        document.getElementById(tabName)?.classList.add('active');
-        btn.classList.add('active');
-      });
-    });
-
-    // Filter functionality
-    const filterSelect = document.getElementById('destination-filter') as HTMLSelectElement;
-    const timelineItems = document.querySelectorAll('.timeline-item');
-
-    filterSelect?.addEventListener('change', () => {
-      const selectedDestination = filterSelect.value;
-
-      timelineItems.forEach((item) => {
-        const destination = item.getAttribute('data-destination');
-        if (selectedDestination === '' || destination === selectedDestination) {
-          (item as HTMLElement).style.display = 'block';
-        } else {
-          (item as HTMLElement).style.display = 'none';
-        }
-      });
-    });
-  </script>
 </BaseLayout>
