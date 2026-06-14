@@ -5,126 +5,186 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getPeople, getTrips } from '../../lib/airtable';
 
 const people = await getPeople();
-const trips = await getTrips('approved');
+const allTrips = await getTrips('approved');
 
-const peopleWithTrips = people.map((p) => ({
-  ...p,
-  tripCount: trips.filter((t) => t.person_name === p.name).length,
-}));
+const today = new Date();
+today.setHours(0, 0, 0, 0);
 
-const sorted = peopleWithTrips.sort((a, b) => b.tripCount - a.tripCount);
+function getNowOrNext(name: string) {
+  const trips = allTrips
+    .filter(t => t.person_name === name)
+    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+
+  const current = trips.find(t =>
+    new Date(t.start_date) <= today && new Date(t.end_date) >= today
+  );
+  if (current) return { trip: current, status: 'now' as const };
+
+  const next = trips.find(t => new Date(t.start_date) > today);
+  if (next) return { trip: next, status: 'next' as const };
+
+  return { trip: null, status: 'none' as const };
+}
+
+function formatRange(start: string, end: string) {
+  const s = new Date(start);
+  const e = new Date(end);
+  const mo = (d: Date) => d.toLocaleString('en-US', { month: 'short' });
+  if (s.getMonth() === e.getMonth()) {
+    return `${mo(s)} ${s.getDate()}–${e.getDate()}`;
+  }
+  return `${mo(s)} ${s.getDate()} – ${mo(e)} ${e.getDate()}`;
+}
+
+const rows = people.map(p => {
+  const trips = allTrips.filter(t => t.person_name === p.name);
+  const { trip, status } = getNowOrNext(p.name);
+  return { ...p, tripCount: trips.length, trip, status };
+}).sort((a, b) => {
+  // currently traveling first, then by next trip date, then by name
+  if (a.status === 'now' && b.status !== 'now') return -1;
+  if (b.status === 'now' && a.status !== 'now') return 1;
+  if (a.trip && b.trip) return new Date(a.trip.start_date).getTime() - new Date(b.trip.start_date).getTime();
+  if (a.trip) return -1;
+  if (b.trip) return 1;
+  return a.name.localeCompare(b.name);
+});
 ---
 
 <BaseLayout title="Constelaciones — Friends">
   <style>
-    .page-header {
-      padding-block: 3rem;
-      background: var(--sand);
+    .hero {
+      padding: 2.5rem 0 2rem;
+      background: linear-gradient(175deg, var(--sand) 0%, var(--cream) 80%);
+      border-bottom: 1px solid var(--clay-lt);
+    }
+    .hero h1 { margin-bottom: 0.35rem; }
+    .hero p  { color: var(--fog); font-size: 1rem; max-width: none; }
+
+    .table-wrap {
+      padding: 2rem 0 5rem;
+      overflow-x: auto;
     }
 
-    .page-header h1 {
-      margin-bottom: 0.5rem;
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
     }
 
-    .friends-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-      gap: 1.5rem;
-      margin-top: 2rem;
+    thead th {
+      text-align: left;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--fog);
+      padding: 0 0.75rem 0.65rem;
+      border-bottom: 2px solid var(--clay-lt);
+      white-space: nowrap;
     }
+    thead th:first-child { padding-left: 0.5rem; }
+    thead th:last-child  { text-align: right; padding-right: 0.5rem; }
 
-    .friend-card {
-      background: white;
-      border: 1px solid var(--clay-lt);
-      padding: 1.5rem;
-      border-radius: 4px;
-      text-align: center;
-      text-decoration: none;
-      transition: border-color 0.2s;
+    tbody tr {
+      border-bottom: 1px solid rgba(232, 195, 176, 0.3);
+      cursor: pointer;
+      transition: background 0.12s;
     }
+    tbody tr:hover { background: var(--sand); }
 
-    .friend-card:hover {
-      border-color: var(--clay);
+    tbody td {
+      padding: 0.6rem 0.75rem;
+      vertical-align: middle;
     }
+    tbody td:first-child { padding-left: 0.5rem; }
+    tbody td:last-child  { text-align: right; padding-right: 0.5rem; }
 
-    .friend-avatar {
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 1rem;
-      border-radius: 50%;
-      background: var(--sand);
+    .col-name {
+      font-weight: 500;
+      color: var(--bark);
+      white-space: nowrap;
+    }
+    .col-home {
+      color: var(--fog);
+      white-space: nowrap;
+    }
+    .col-destination {
       display: flex;
       align-items: center;
-      justify-content: center;
-      font-size: 2rem;
+      gap: 0.5rem;
+      white-space: nowrap;
     }
-
-    .friend-name {
-      font-family: var(--serif);
-      font-size: 1.1rem;
-      color: var(--bark);
-      margin-bottom: 0.25rem;
-    }
-
-    .friend-city {
-      font-size: 0.9rem;
+    .col-dates {
       color: var(--fog);
-      margin-bottom: 1rem;
+      white-space: nowrap;
     }
-
-    .friend-trips {
-      font-size: 0.85rem;
-      color: var(--ink);
-    }
-
-    .trip-count {
-      font-family: var(--serif);
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: var(--clay);
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 3rem 1rem;
+    .col-count {
+      font-variant-numeric: tabular-nums;
       color: var(--fog);
+      font-size: 0.82rem;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.now  { background: #2d7c45; }
+    .status-dot.next { background: var(--clay-lt); }
+
+    .destination-name { color: var(--bark); }
+    .no-trips { color: var(--fog); font-style: italic; }
+
+    /* hide less-important cols on mobile */
+    @media (max-width: 600px) {
+      .col-home, .col-dates { display: none; }
     }
   </style>
 
-  <section class="section page-header">
+  <section class="hero">
     <div class="wrap">
-      <h1>Friends in Constelaciones</h1>
-      <p>Roster of {people.length} contributors</p>
+      <h1>Friends</h1>
+      <p>{people.length} people in the constellation</p>
     </div>
   </section>
 
-  <section class="section">
+  <div class="table-wrap">
     <div class="wrap">
-      {sorted.length > 0 ? (
-        <div class="friends-grid">
-          {sorted.map((person: any) => (
-            <a href={`/friends/${person.airtableId}`} class="friend-card">
-              <div class="friend-avatar">
-                {person.avatar_url ? (
-                  <img src={person.avatar_url} alt={person.name} style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" />
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th class="col-home">Homebase</th>
+            <th>Now / Next</th>
+            <th class="col-dates">Dates</th>
+            <th>Trips</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => (
+            <tr onclick={`window.location='/friends/${row.airtableId}'`}>
+              <td class="col-name">{row.name}</td>
+              <td class="col-home">{row.home_city || '—'}</td>
+              <td>
+                {row.trip ? (
+                  <div class="col-destination">
+                    <span class={`status-dot ${row.status}`}></span>
+                    <span class="destination-name">{row.trip.destination}</span>
+                  </div>
                 ) : (
-                  person.name.charAt(0).toUpperCase()
+                  <span class="no-trips">No upcoming trips</span>
                 )}
-              </div>
-              <h3 class="friend-name">{person.name}</h3>
-              {person.home_city && <div class="friend-city">{person.home_city}</div>}
-              <div class="friend-trips">
-                <div class="trip-count">{person.tripCount}</div>
-                <div>{person.tripCount === 1 ? 'trip' : 'trips'}</div>
-              </div>
-            </a>
+              </td>
+              <td class="col-dates">
+                {row.trip ? formatRange(row.trip.start_date, row.trip.end_date) : '—'}
+              </td>
+              <td class="col-count">{row.tripCount}</td>
+            </tr>
           ))}
-        </div>
-      ) : (
-        <div class="empty-state">
-          <p>No friends listed yet. Check back soon!</p>
-        </div>
-      )}
+        </tbody>
+      </table>
     </div>
-  </section>
+  </div>
 </BaseLayout>
