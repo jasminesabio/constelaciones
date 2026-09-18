@@ -15,9 +15,8 @@ const personTrips = allTrips
   .filter(t => t.person_name === person.name)
   .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
 
-const today = new Date();
-today.setHours(0, 0, 0, 0);
-const todayStr = today.toISOString().split('T')[0];
+const today = new Date('2026-06-01T12:00:00'); // TEST: rewound to June 1
+const todayStr = '2026-06-01';
 
 function tripStatus(trip: typeof personTrips[0]) {
   if (trip.start_date <= todayStr && trip.end_date >= todayStr) return 'now';
@@ -123,7 +122,6 @@ const nextTrip    = personTrips.find(t => tripStatus(t) === 'next');
       text-decoration: none;
     }
     .trip-row:hover { background: var(--sand); }
-    .trip-row.past { opacity: 0.45; }
 
     .trip-dot {
       flex: 0 0 10px;
